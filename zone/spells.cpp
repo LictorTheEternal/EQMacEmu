@@ -918,8 +918,8 @@ bool Client::CheckFizzle(uint16 spell_id)
 		{
 			spellFizzleAdjustment = 0;
 		}
-		// for PAL/RNG/SHD class the fizzle adjustment is overriden for spells 41+ instead
-		if ((GetClass() == Class::Paladin || GetClass() == Class::Ranger || GetClass() == Class::ShadowKnight) && spellLevel > 40)
+		// for PAL/RNG/SHD/BST class the fizzle adjustment is overriden for spells 41+ instead
+		if ((GetClass() == Class::Paladin || GetClass() == Class::Ranger || GetClass() == Class::ShadowKnight || GetClass() == Class::Beastlord) && spellLevel > 40)
 		{
 			spellFizzleAdjustment = 0;
 		}
@@ -1751,7 +1751,7 @@ bool Mob::DetermineSpellTargets(uint16 spell_id, Mob *&spell_target, Mob *&ae_ce
 	}
 
 	// PvP - Bard Selo is self only
-	if (zone->GetGuildID() == 1 && spells[spell_id].bardsong && spells[spell_id].goodEffect && GetSpellEffectIndex(spell_id, SE_MovementSpeed) != -1)
+	if (zone->GetGuildID() == 1 && spells[spell_id].bardsong && spells[spell_id].goodEffect && GetSpellEffectIndex(spell_id, SE_MovementSpeed) != -1 && zone->GetZoneID() != Zones::VEXTHAL)
 		targetType = ST_Self;
 
 	switch (targetType)
@@ -2006,6 +2006,18 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, ui
 		if(IsClient()){
 			if(!CastToClient()->GetGM()){
 				Message(Chat::SpellFailure, "You can't levitate in this zone.");
+				return false;
+			}
+		}
+	}
+
+	if(IsEffectInSpell(spell_id, SE_BindAffinity)){
+		if(IsClient() && !CastToClient()->GetGM() && !RuleB(Character, BindAnywhere)){
+			if(!zone->CanBind()
+				|| (GetZoneID() == Zones::KAEL && !zone->IsBindArea(GetX(), GetY(), GetZ()))
+				|| (GetZoneID() == Zones::SKYSHRINE && !zone->IsBindArea(GetX(), GetY(), GetZ())))
+			{
+				interrupt_message = StringID::CANNOT_BIND;
 				return false;
 			}
 		}
@@ -3231,6 +3243,8 @@ bool Mob::SpellOnTarget(uint16 spell_id, Mob* spelltar, bool reflect, bool use_r
 	else if (IsDetrimentalSpell(spell_id) && !is_tap_recourse && !IsHarmonySpell(spell_id) && !IsAllianceSpellLine(spell_id) &&
 		     CancelMagicShouldAggro(spell_id, spelltar))
 	{
+	  if (spelltar != this) // Don't aggro ourselves!
+	  {
 		Log(Logs::Detail, Logs::Spells, "Applying aggro for spell %d", spell_id);
 		// Damage aggro is handled in CommonDamage()
 		if (!HasDirectDamageEffect(spell_id)) {
@@ -3260,10 +3274,12 @@ bool Mob::SpellOnTarget(uint16 spell_id, Mob* spelltar, bool reflect, bool use_r
 				spelltar->CastToNPC()->CallForHelp(this);	// this will fail if timer is ticking down, so won't spam
 			}
 		}
+	  }
 	}
 	else if ((IsBeneficialSpell(spell_id) || is_tap_recourse) && !IsSummonPCSpell(spell_id) && !IsAEMemBlurSpell(spell_id) && !IsBindSightSpell(spell_id)
 		&& (!spelltar->IsPet() || spelltar->IsCharmedPet())											// no beneficial aggro for summoned pets
 		&& (!IsNPC() || !isproc || CastToNPC()->GetInnateProcSpellId() != spell_id)					// NPC innate procs always hit the target, even if beneficial. we don't want beneficial procs aggroing nearby NPCs
+        && !(IsNPC() && spelltar->IsCharmedPet())                                                   // NPCs that were mid-cast of beneficial spells while a pet was charmed should not aggro nearby NPCs
 		&& (!spelltar->IsCharmedPet() || (spelltar->IsCharmedPet() && !IsHealingSpell(spell_id)))	// Healing spells on charmed pets don't cause aggro.
 		)
 	{

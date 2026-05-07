@@ -736,11 +736,12 @@ int EntityList::FleeAllyCount(Mob *attacker, Mob *exclude)
 		if (!mob || (mob == exclude))
 			continue;
 
-		if (!zone->SkipLoS())
-		{
-			if (!exclude->CheckLosFN(mob))
-				continue;
-		}
+		   // Skip LoS for FleeAllyCount if zone disables LoS or fungusgrove-specific flag is set
+		   if (!(zone->SkipLoS() || zone->FleeAllySkipLoS()))
+		   {
+			   if (!exclude->CheckLosFN(mob))
+				   continue;
+		   }
 
 		float AggroRange = mob->GetAggroRange();
 		float AssistRange = mob->GetAssistRange();
@@ -808,6 +809,8 @@ int EntityList::StackedMobsCount(Mob *center)
 // if attacker is null, then will try to use target or top hater
 void NPC::CallForHelp(Mob* attacker, bool ignoreTimer)
 {
+	if (attacker == this)
+		return;
 	if (IsPet())
 		return;
 
@@ -956,9 +959,16 @@ bool Mob::IsAttackAllowed(Mob *target, bool isSpellAttack, int16 spellid)
 		{
 			Log(Logs::General, Logs::Combat, "IsAttackAllowed failed: %s is on the same faction as %s", GetName(), target->GetName());
 			RemoveFromHateList(target);
+			RemoveFromRampageList(target, true);
 			return false;
 		}
-
+		if (npc_faction != 0 && target->GetReverseFactionCon(this) <= FACTION_KINDLY && GetReverseFactionCon(target) <= FACTION_KINDLY)
+		{
+			Log(Logs::General, Logs::Combat, "IsAttackAllowed failed: %s is allied with %s", GetName(), target->GetName());
+			RemoveFromHateList(target);
+			RemoveFromRampageList(target, true);
+			return false;
+		}
 	}
 
 	// can't damage own pet (applies to everthing)
