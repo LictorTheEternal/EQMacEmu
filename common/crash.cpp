@@ -294,9 +294,6 @@ void print_trace()
 
 		abort(); /* If gdb failed to start */
 	}
-	else {
-		waitpid(child_pid, nullptr, 0);
-	}
 
 	std::ifstream    input(temp_output_file);
 	std::string      crash_report;
